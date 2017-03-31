@@ -14,18 +14,19 @@ public class TestConstants {
 
     private static TestConstants CONSTANTS;
 
-    public static final Group GRP_A = Group.anyone(), GRP_N = Group.nobody(), GRP_M = Group.managers(), GRP_S =
+    public final Group ANYBODY = Group.anyone(), NOBODY = Group.nobody(), MANAGERS = Group.managers(), SENDERS =
             SendersGroup.get();
-    public static final String STR_A = "test-a", STR_B = "test-b", STR_C = "test-c", ADDR_A = "testerA@test.com", ADDR_B =
-            "testerB@test.com", ADDR_C = "testerC@test.com", ADDR_INVALID = "Ceci n'est pas une adresse";
-    public static final Locale LOC_A = new Locale("aa", "bb", "cc"), LOC_B = Locale.CHINA, LOC_DEF = I18N.getLocale();
-    public static final LocalizedString LS_A = new LocalizedString(LOC_A, STR_A), LS_AA = LS_A.with(LOC_DEF, STR_A), LS_AB =
-            LS_A.with(LOC_DEF, STR_B), LS_B = new LocalizedString(LOC_A, STR_B), LS_BB = LS_B.with(LOC_DEF, STR_B), LS_BC =
-            LS_B.with(LOC_DEF, STR_C), LS_C = new LocalizedString(LOC_A, STR_C), LS_CA = LS_C.with(LOC_DEF, STR_A), LS_CC =
-            LS_C.with(LOC_DEF, STR_C), LS_EMPTY = new LocalizedString();
+    public final String FIRST_NAME = "John", LAST_NAME = "Doe", DISPLAY_NAME = "Dude", USER_EMAIL = "johndoe@gmail.com",
+            MANAGER_EMAIL = MANAGERS.getMembers().findFirst().get().getEmail(), VALID_EMAIL = "tester@test.com", INVALID_EMAIL =
+            "Ceci n'est pas une adresse";
+    public final Locale ITALIAN = Locale.ITALIAN, CHINESE = Locale.CHINESE, DEFAULT_LOCALE = I18N.getLocale();
+    public final LocalizedString LS_A = new LocalizedString(ITALIAN, FIRST_NAME), LS_AA = LS_A.with(DEFAULT_LOCALE, FIRST_NAME), LS_AB =
+            LS_A.with(DEFAULT_LOCALE, LAST_NAME), LS_B = new LocalizedString(ITALIAN, LAST_NAME), LS_BB = LS_B.with(DEFAULT_LOCALE, LAST_NAME),
+            LS_BC = LS_B.with(DEFAULT_LOCALE, DISPLAY_NAME), LS_C = new LocalizedString(ITALIAN, DISPLAY_NAME), LS_CA =
+            LS_C.with(DEFAULT_LOCALE, FIRST_NAME), LS_CC = LS_C.with(DEFAULT_LOCALE, DISPLAY_NAME), LS_EMPTY = new LocalizedString();
     public static final Period PERIOD = Period.parse("P1Y");
 
-    public final User USER = new User(new UserProfile("John", "Doe", null, "johndoe@gmail.com", null));
+    public final User USER = new User(new UserProfile(FIRST_NAME, LAST_NAME, DISPLAY_NAME, USER_EMAIL, null));
 
     private TestConstants() {
     }

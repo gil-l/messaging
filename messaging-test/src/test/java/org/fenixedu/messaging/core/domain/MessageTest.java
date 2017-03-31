@@ -1,13 +1,25 @@
 package org.fenixedu.messaging.core.domain;
 
-import pt.ist.fenixframework.test.core.FenixFrameworkRunner;
+import static org.fenixedu.messaging.test.util.TestHelpers.expectNullPointerException;
+import static org.fenixedu.messaging.test.util.TestHelpers.shortWait;
+import static org.fenixedu.messaging.test.util.TestHelpers.testContentSetters;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.fenixedu.bennu.core.groups.Group;
 import org.fenixedu.bennu.core.security.Authenticate;
 import org.fenixedu.commons.i18n.LocalizedString;
 import org.fenixedu.messaging.core.domain.Message.MessageBuilder;
@@ -16,63 +28,49 @@ import org.fenixedu.messaging.core.exception.MessagingDomainException;
 import org.fenixedu.messaging.test.mock.MockDispatcher;
 import org.fenixedu.messaging.test.util.TestConstants;
 import org.fenixedu.messaging.test.util.TestHelpers;
+import org.joda.time.DateTime;
+import org.joda.time.DateTimeUtils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import static org.fenixedu.messaging.test.util.TestConstants.ADDR_A;
-import static org.fenixedu.messaging.test.util.TestConstants.ADDR_INVALID;
-import static org.fenixedu.messaging.test.util.TestConstants.LOC_A;
-import static org.fenixedu.messaging.test.util.TestConstants.LOC_B;
-import static org.fenixedu.messaging.test.util.TestConstants.LOC_DEF;
-import static org.fenixedu.messaging.test.util.TestConstants.LS_A;
-import static org.fenixedu.messaging.test.util.TestConstants.LS_AA;
-import static org.fenixedu.messaging.test.util.TestConstants.LS_AB;
-import static org.fenixedu.messaging.test.util.TestConstants.LS_B;
-import static org.fenixedu.messaging.test.util.TestConstants.LS_BB;
-import static org.fenixedu.messaging.test.util.TestConstants.LS_BC;
-import static org.fenixedu.messaging.test.util.TestConstants.LS_C;
-import static org.fenixedu.messaging.test.util.TestConstants.LS_CA;
-import static org.fenixedu.messaging.test.util.TestConstants.LS_CC;
-import static org.fenixedu.messaging.test.util.TestConstants.LS_EMPTY;
-import static org.fenixedu.messaging.test.util.TestConstants.STR_A;
-import static org.fenixedu.messaging.test.util.TestConstants.STR_B;
-import static org.fenixedu.messaging.test.util.TestConstants.STR_C;
-import static org.fenixedu.messaging.test.util.TestHelpers.expectNullPointerException;
-import static org.fenixedu.messaging.test.util.TestHelpers.shortWait;
-import static org.fenixedu.messaging.test.util.TestHelpers.testAddressSetters;
-import static org.fenixedu.messaging.test.util.TestHelpers.testContentSetters;
-import static org.fenixedu.messaging.test.util.TestHelpers.testRecipientSetters;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertSame;
-import static org.junit.Assert.assertTrue;
+import pt.ist.fenixframework.test.core.FenixFrameworkRunner;
 
 @RunWith(FenixFrameworkRunner.class)
 public class MessageTest {
 
+    private final TestConstants constants;
+
+    public MessageTest() {
+        constants = TestConstants.get();
+    }
+
     //FIXME cannot test templates as ServletContainerInitializer is not run. Find alternative way.
     //XXX Message deletion cannot be tested with current no repository backend
     //XXX user mocking and dispatcher setting cannot be done in class startup/cleanup as they access domain objects
-    //TODO ensure Message.fromSystem produces regular builder (we use it in most tests) [PROBLEM: can't inspect builder state]
-    //TODO separate message dispatch tests and test message skipping
-
+    //TODO ensure Message#fromSystem produces regular builder (we use it in most tests) [PROBLEM: can't inspect builder state]
+    //TODO separate message dispatch tests
+    //TODO test message skipping
+    //TODO test fromsystem is same as from system sender
+    //XXX all setter tests test builder reusability too
+    //TODO test relation/priority between recipient types in message sending (independent lists in message object, defined
+    // order in proper email)
 
     @Before
     public void startup() {
-        Authenticate.mock(TestConstants.get().USER);
+        Authenticate.mock(constants.USER);
+        DateTimeUtils.setCurrentMillisFixed(DateTime.now().getMillis());
     }
 
     @After
     public void cleanup() {
         Authenticate.unmock();
+        DateTimeUtils.setCurrentMillisSystem();
     }
 
     /**
-     * Builder supplier throws when required sender parameter is null
+     * {@link Message#from } throws NullPointerException on null
      */
     @Test(expected = MessagingDomainException.class)
     public void nullSender() {
@@ -80,7 +78,7 @@ public class MessageTest {
     }
 
     /**
-     * Builder provides default values enabling the straightforward creation of a valid default empty message:
+     * {@link MessageBuilder } provides default values enabling the straightforward creation of a valid default empty message:
      * Created Message is not null
      * Automatic properties and relations are set
      * |- Message Sender is provided sender
@@ -98,7 +96,6 @@ public class MessageTest {
      * |- Message is removed from the pending queue
      * `- Message sent date is updated once report's delivery finishes
      * XXX Delivery and report handling should be tested further within dispatcher modules
-     * FIXME Date testing is for now reduced to a null check. How can I mock/test the 'now' aspect?
      */
     @Test
     public void emptyMessage() {
@@ -108,7 +105,7 @@ public class MessageTest {
 
         assertSame(message.getSender(), sender);
         assertSame(message.getCreator(), TestConstants.get().USER);
-        assertNotNull(message.getCreated());
+        assertEquals(message.getCreated(), DateTime.now());
         assertNull(message.getSent());
         assertNull(message.getDispatchReport());
         assertSame(message.getMessagingSystemFromPendingDispatch(), MessagingSystem.getInstance());
@@ -117,6 +114,7 @@ public class MessageTest {
         assertTrue(message.getCcGroups().isEmpty());
         assertTrue(message.getToGroups().isEmpty());
         assertNull(message.getSingleBccs());
+
         LocalizedString ls = message.getSubject();
         assertNotNull(ls);
         assertTrue(ls.isEmpty());
@@ -126,20 +124,20 @@ public class MessageTest {
         ls = message.getTextBody();
         assertNotNull(ls);
         assertTrue(ls.isEmpty());
-        assertSame(message.getPreferredLocale(), LOC_DEF);
+        assertSame(message.getPreferredLocale(), constants.DEFAULT_LOCALE);
         assertNull(message.getReplyTo());
 
         MessagingSystem.setMessageDispatcher(MockDispatcher.sync);
         MessageDispatchReport report = MessagingSystem.dispatch(message);
         assertNotNull(report);
-        assertFalse(MessagingSystem.getPendingMessages().stream().anyMatch(m->m.equals(message)));
+        assertFalse(MessagingSystem.getPendingMessages().contains(message));
         assertSame(report, message.getDispatchReport());
         assertNotNull(message.getSent());
         MessagingSystem.setMessageDispatcher(null);
     }
 
     /**
-     * MessageBuilder.from overwrites initially supplied sender
+     * {@link MessageBuilder#from } overwrites initially supplied sender
      */
     @Test
     public void messageFrom() {
@@ -149,49 +147,55 @@ public class MessageTest {
     }
 
     /**
-     *  MessageBuilder.from throws MessageDomainException on null
+     * {@link MessageBuilder#from } throws NullPointerException on null
      */
-    @Test(expected = MessagingDomainException.class)
+    @Test(expected = NullPointerException.class)
     public void messageFromNull() {
         MessageBuilder builder = Message.fromSystem();
         builder.from(null);
     }
 
-    //FIXME not very atomic... succint though.
     /**
-     * @see TestHelpers#testRecipientSetters
+     * {@link MessageBuilder}'s {@link MessageBuilder#bcc(Stream) Stream} and {@link MessageBuilder#bcc(Group...) Array} bcc
+     * methods are adders and ignore nulls among provided Groups.
+     * {@link MessageBuilder}'s {@link MessageBuilder#bcc(Collection) Collection} bcc method is a setter and ignores nulls
+     * among provided Groups.
+     * Recipient and address lists in {@link Message} and {@link MessageBuilder} objects are independent of each other and
+     * indifferent to group members and address validity.
      */
     @Test
-    public void messageBcc() {
+    public void messageRecipients() {
         MessageBuilder builder = Message.fromSystem();
-        TestHelpers.testRecipientSetters(builder::bcc, builder::bcc, builder::bcc, () -> builder.send().getBccGroups());
-    }
 
-    /**
-     * @see TestHelpers#testRecipientSetters
-     */
-    @Test
-    public void messageCc() {
-        MessageBuilder builder = Message.fromSystem();
-        testRecipientSetters(builder::cc, builder::cc, builder::cc, () -> builder.send().getCcGroups());
-    }
+        Supplier<Set<Group>> bccGetter = () -> builder.send().getBccGroups();
+        Supplier<Set<Group>> toGetter = () -> builder.send().getToGroups();
+        Supplier<Set<Group>> ccGetter = () -> builder.send().getCcGroups();
+        Supplier<Set<String>> singleBccGetter = () -> builder.send().getSingleBccsSet();
 
-    /**
-     * @see TestHelpers#testRecipientSetters
-     */
-    @Test
-    public void messageTo() {
-        MessageBuilder builder = Message.fromSystem();
-        testRecipientSetters(builder::to, builder::to, builder::to, () -> builder.send().getToGroups());
-    }
+        Group[] recipientArray = { null, constants.ANYBODY, constants.NOBODY };
+        Collection<Group> recipientCollection = Arrays.asList(constants.NOBODY, constants.MANAGERS, constants.NOBODY, null);
+        Stream<Group> recipientStream = recipientCollection.stream();
+        String[] addressArray = { null, constants.INVALID_EMAIL, constants.MANAGER_EMAIL };
+        Collection<String> addressCollection =
+                Arrays.asList(constants.USER_EMAIL, constants.USER_EMAIL, constants.MANAGER_EMAIL, null);
+        Stream<String> addressStream = addressCollection.stream();
 
-    /**
-     * @see TestHelpers#testAddressSetters
-     */
-    @Test
-    public void messageSingleBcc() {
-        MessageBuilder builder = Message.fromSystem();
-        testAddressSetters(builder::singleBcc, builder::singleBcc, builder::singleBcc, () -> builder.send().getSingleBccsSet());
+        TestHelpers.testNullResistantSetAdder(builder::to, recipientArray, toGetter);
+        TestHelpers.testNullResistantSetAdder(builder::to, recipientStream, toGetter);
+        TestHelpers.testNullResistantSetSetter(builder::to, recipientCollection, toGetter);
+
+        TestHelpers.testNullResistantSetAdder(builder::cc, recipientArray, ccGetter);
+        TestHelpers.testNullResistantSetAdder(builder::cc, recipientStream, ccGetter);
+        TestHelpers.testNullResistantSetSetter(builder::cc, recipientCollection, ccGetter);
+
+        TestHelpers.testNullResistantSetAdder(builder::bcc, recipientArray, bccGetter);
+        TestHelpers.testNullResistantSetAdder(builder::bcc, recipientStream, bccGetter);
+        TestHelpers.testNullResistantSetSetter(builder::bcc, recipientCollection, bccGetter);
+
+        TestHelpers.testNullResistantSetAdder(builder::singleBcc, addressArray, singleBccGetter);
+        TestHelpers.testNullResistantSetAdder(builder::singleBcc, addressStream, singleBccGetter);
+        TestHelpers.testNullResistantSetSetter(builder::singleBcc, addressCollection, singleBccGetter);
+
     }
 
     /**
@@ -204,64 +208,64 @@ public class MessageTest {
         MessageBuilder builder = Message.fromSystem();
         Message message;
 
-        builder.content(LS_A, LS_B, LS_C);
+        builder.content(constants.LS_A, constants.LS_B, constants.LS_C);
         message = builder.send();
-        assertSame(message.getSubject(), LS_A);
-        assertSame(message.getTextBody(), LS_B);
-        assertSame(message.getHtmlBody(), LS_C);
+        assertSame(message.getSubject(), constants.LS_A);
+        assertSame(message.getTextBody(), constants.LS_B);
+        assertSame(message.getHtmlBody(), constants.LS_C);
 
-        builder.content(STR_A, STR_B, STR_C);
+        builder.content(constants.FIRST_NAME, constants.LAST_NAME, constants.DISPLAY_NAME);
         message = builder.send();
-        assertEquals(message.getSubject(), LS_AA);
-        assertEquals(message.getTextBody(), LS_BB);
-        assertEquals(message.getHtmlBody(), LS_CC);
+        assertEquals(message.getSubject(), constants.LS_AA);
+        assertEquals(message.getTextBody(), constants.LS_BB);
+        assertEquals(message.getHtmlBody(), constants.LS_CC);
 
-        builder.content(STR_B, STR_C, STR_A);
+        builder.content(constants.LAST_NAME, constants.DISPLAY_NAME, constants.FIRST_NAME);
         message = builder.send();
-        assertEquals(message.getSubject(), LS_AB);
-        assertEquals(message.getTextBody(), LS_BC);
-        assertEquals(message.getHtmlBody(), LS_CA);
-
-        builder.content((String) null, null, null);
-        message = builder.send();
-        assertEquals(message.getSubject(), LS_A);
-        assertEquals(message.getTextBody(), LS_B);
-        assertEquals(message.getHtmlBody(), LS_C);
+        assertEquals(message.getSubject(), constants.LS_AB);
+        assertEquals(message.getTextBody(), constants.LS_BC);
+        assertEquals(message.getHtmlBody(), constants.LS_CA);
 
         builder.content((String) null, null, null);
         message = builder.send();
-        assertEquals(message.getSubject(), LS_A);
-        assertEquals(message.getTextBody(), LS_B);
-        assertEquals(message.getHtmlBody(), LS_C);
+        assertEquals(message.getSubject(), constants.LS_A);
+        assertEquals(message.getTextBody(), constants.LS_B);
+        assertEquals(message.getHtmlBody(), constants.LS_C);
 
-        builder.content(null, null, null, LOC_A);
+        builder.content((String) null, null, null);
         message = builder.send();
-        assertEquals(message.getSubject(), LS_EMPTY);
-        assertEquals(message.getTextBody(), LS_EMPTY);
-        assertEquals(message.getHtmlBody(), LS_EMPTY);
+        assertEquals(message.getSubject(), constants.LS_A);
+        assertEquals(message.getTextBody(), constants.LS_B);
+        assertEquals(message.getHtmlBody(), constants.LS_C);
 
-        builder.content(null, null, null, LOC_A);
+        builder.content(null, null, null, constants.ITALIAN);
         message = builder.send();
-        assertEquals(message.getSubject(), LS_EMPTY);
-        assertEquals(message.getTextBody(), LS_EMPTY);
-        assertEquals(message.getHtmlBody(), LS_EMPTY);
+        assertEquals(message.getSubject(), constants.LS_EMPTY);
+        assertEquals(message.getTextBody(), constants.LS_EMPTY);
+        assertEquals(message.getHtmlBody(), constants.LS_EMPTY);
 
-        builder.content(STR_C, STR_A, STR_B, LOC_A);
+        builder.content(null, null, null, constants.ITALIAN);
         message = builder.send();
-        assertEquals(message.getSubject(), LS_C);
-        assertEquals(message.getTextBody(), LS_A);
-        assertEquals(message.getHtmlBody(), LS_B);
+        assertEquals(message.getSubject(), constants.LS_EMPTY);
+        assertEquals(message.getTextBody(), constants.LS_EMPTY);
+        assertEquals(message.getHtmlBody(), constants.LS_EMPTY);
 
-        builder.content(STR_A, STR_B, STR_C, LOC_A);
+        builder.content(constants.DISPLAY_NAME, constants.FIRST_NAME, constants.LAST_NAME, constants.ITALIAN);
         message = builder.send();
-        assertEquals(message.getSubject(), LS_A);
-        assertEquals(message.getTextBody(), LS_B);
-        assertEquals(message.getHtmlBody(), LS_C);
+        assertEquals(message.getSubject(), constants.LS_C);
+        assertEquals(message.getTextBody(), constants.LS_A);
+        assertEquals(message.getHtmlBody(), constants.LS_B);
 
-        expectNullPointerException(() -> builder.content(null, LS_A, LS_B));
-        expectNullPointerException(() -> builder.content(LS_A, null, LS_B));
-        expectNullPointerException(() -> builder.content(LS_A, LS_B, null));
-        expectNullPointerException(() -> builder.content(STR_A, STR_A, STR_A, null));
+        builder.content(constants.FIRST_NAME, constants.LAST_NAME, constants.DISPLAY_NAME, constants.ITALIAN);
+        message = builder.send();
+        assertEquals(message.getSubject(), constants.LS_A);
+        assertEquals(message.getTextBody(), constants.LS_B);
+        assertEquals(message.getHtmlBody(), constants.LS_C);
+
+        expectNullPointerException(() -> builder.content(null, constants.LS_A, constants.LS_B));
+        expectNullPointerException(() -> builder.content(constants.LS_A, null, constants.LS_B));
+        expectNullPointerException(() -> builder.content(constants.LS_A, constants.LS_B, null));
+        expectNullPointerException(() -> builder.content(constants.FIRST_NAME, constants.FIRST_NAME, constants.FIRST_NAME, null));
     }
 
     /**
@@ -272,25 +276,25 @@ public class MessageTest {
         MessageBuilder builder = Message.fromSystem();
         assertTrue(builder.send().getContentLocales().isEmpty());
 
-        builder.content(STR_A, STR_B, STR_C);
+        builder.content(constants.FIRST_NAME, constants.LAST_NAME, constants.DISPLAY_NAME);
         Set<Locale> locales = builder.send().getContentLocales();
-        assertTrue(locales.size() == 1 && locales.contains(LOC_DEF));
+        assertTrue(locales.size() == 1 && locales.contains(constants.DEFAULT_LOCALE));
 
-        builder.textBody(STR_B, LOC_A);
+        builder.textBody(constants.LAST_NAME, constants.ITALIAN);
         locales = builder.send().getContentLocales();
-        assertTrue(locales.size() == 2 && locales.contains(LOC_DEF) && locales.contains(LOC_A));
+        assertTrue(locales.size() == 2 && locales.contains(constants.DEFAULT_LOCALE) && locales.contains(constants.ITALIAN));
 
-        builder.htmlBody(STR_C, LOC_B);
+        builder.htmlBody(constants.DISPLAY_NAME, constants.CHINESE);
         locales = builder.send().getContentLocales();
-        assertTrue(locales.size() == 3 && locales.contains(LOC_DEF) && locales.contains(LOC_A) && locales.contains(LOC_B));
+        assertTrue(locales.size() == 3 && locales.contains(constants.DEFAULT_LOCALE) && locales.contains(constants.ITALIAN) && locales.contains(constants.CHINESE));
 
-        builder.htmlBody(null, LOC_B);
+        builder.htmlBody(null, constants.CHINESE);
         locales = builder.send().getContentLocales();
-        assertTrue(locales.size() == 2 && locales.contains(LOC_DEF) && locales.contains(LOC_A));
+        assertTrue(locales.size() == 2 && locales.contains(constants.DEFAULT_LOCALE) && locales.contains(constants.ITALIAN));
 
-        builder.textBody(null, LOC_A);
+        builder.textBody(null, constants.ITALIAN);
         locales = builder.send().getContentLocales();
-        assertTrue(locales.size() == 1 && locales.contains(LOC_DEF));
+        assertTrue(locales.size() == 1 && locales.contains(constants.DEFAULT_LOCALE));
 
         builder.subject((String) null);
         builder.textBody((String) null);
@@ -325,7 +329,6 @@ public class MessageTest {
         testContentSetters(builder::htmlBody, builder::htmlBody, builder::htmlBody, () -> builder.send().getHtmlBody());
     }
 
-
     /**
      * Sets reply to address to provided address
      * Reply to sender setter copies sender's default reply to address
@@ -339,13 +342,13 @@ public class MessageTest {
         builder.replyTo(null);
         assertNull(builder.send().getReplyTo());
 
-        builder.replyTo(ADDR_A);
-        assertEquals(builder.send().getReplyTo(), ADDR_A);
+        builder.replyTo(constants.USER_EMAIL);
+        assertEquals(builder.send().getReplyTo(), constants.USER_EMAIL);
 
         builder.replyToSender();
         assertEquals(builder.send().getReplyTo(), sender.getReplyTo());
 
-        builder.replyTo(ADDR_INVALID);
+        builder.replyTo(constants.INVALID_EMAIL);
         assertNull(builder.send().getReplyTo());
 
     }
@@ -358,13 +361,13 @@ public class MessageTest {
     public void messagePreferredLocale() {
         MessageBuilder builder = Message.fromSystem();
 
-        builder.preferredLocale(LOC_A);
-        assertEquals(builder.send().getPreferredLocale(), LOC_A);
+        builder.preferredLocale(constants.ITALIAN);
+        assertEquals(builder.send().getPreferredLocale(), constants.ITALIAN);
 
-        builder.preferredLocale(LOC_B);
-        assertEquals(builder.send().getPreferredLocale(), LOC_B);
+        builder.preferredLocale(constants.CHINESE);
+        assertEquals(builder.send().getPreferredLocale(), constants.CHINESE);
 
-        expectNullPointerException(() -> builder.preferredLocale(LOC_B));
+        expectNullPointerException(() -> builder.preferredLocale(constants.CHINESE));
     }
 
     /**
@@ -382,8 +385,6 @@ public class MessageTest {
         assertSame(ordered.get(1), mB);
         assertSame(ordered.get(2), mC);
     }
-
-
 
     @Test
     public void messageTemplate() {

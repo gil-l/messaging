@@ -13,8 +13,8 @@ import org.junit.runner.RunWith;
 
 import static org.fenixedu.messaging.test.util.TestConstants.ADDR_A;
 import static org.fenixedu.messaging.test.util.TestConstants.ADDR_B;
-import static org.fenixedu.messaging.test.util.TestConstants.GRP_A;
-import static org.fenixedu.messaging.test.util.TestConstants.GRP_M;
+import static org.fenixedu.messaging.test.util.TestConstants.ANYBODY;
+import static org.fenixedu.messaging.test.util.TestConstants.MANAGERS;
 import static org.fenixedu.messaging.test.util.TestConstants.PERIOD;
 import static org.fenixedu.messaging.test.util.TestConstants.STR_A;
 import static org.fenixedu.messaging.test.util.TestConstants.STR_B;
@@ -171,11 +171,11 @@ public class SenderTest {
     public void senderMembers() {
         SenderBuilder builder = Sender.from(ADDR_A);
 
-        assertEquals(builder.members(GRP_M).build().getMembers(), GRP_M);
+        assertEquals(builder.members(MANAGERS).build().getMembers(), MANAGERS);
 
         assertEquals(builder.members(null).build().getMembers(), Group.nobody());
 
-        assertEquals(builder.members(GRP_M).build().getMembers(), GRP_M);
+        assertEquals(builder.members(MANAGERS).build().getMembers(), MANAGERS);
 
         assertEquals(builder.members(null).build().getMembers(), Group.nobody());
     }
@@ -192,7 +192,7 @@ public class SenderTest {
     @Test
     public void regularSender() {
         Sender sender = Sender.from(ADDR_A).as(STR_A).keepMessages(2, PERIOD).replyTo(ADDR_B).htmlEnabled(true)
-                .members(GRP_M).recipients(GRP_A).build();
+                .members(MANAGERS).recipients(ANYBODY).build();
         assertEquals(sender.getAddress(), ADDR_A);
         assertEquals(sender.getName(), STR_A);
         assertEquals(sender.getReplyTo(), ADDR_B);
@@ -200,9 +200,9 @@ public class SenderTest {
         assertTrue(policy.getAmount() == 2);
         assertEquals(policy.getPeriod(), PERIOD);
         assertTrue(sender.getHtmlEnabled());
-        assertEquals(sender.getMembers(), GRP_M);
+        assertEquals(sender.getMembers(), MANAGERS);
         Set<Group> recipients = sender.getRecipients();
-        assertTrue(recipients.size() == 1 && recipients.contains(GRP_A));
+        assertTrue(recipients.size() == 1 && recipients.contains(ANYBODY));
     }
 
     private static Sender testSender = null;

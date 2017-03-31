@@ -1,37 +1,21 @@
 package org.fenixedu.messaging.test.util;
 
-import jersey.repackaged.com.google.common.base.Supplier;
-import jersey.repackaged.com.google.common.collect.Lists;
+import static java.util.Objects.requireNonNull;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.fail;
 
 import java.util.Collection;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import org.fenixedu.bennu.core.groups.Group;
 import org.fenixedu.commons.i18n.LocalizedString;
-import org.junit.Assert;
-
-import static org.fenixedu.messaging.test.util.TestConstants.ADDR_A;
-import static org.fenixedu.messaging.test.util.TestConstants.ADDR_B;
-import static org.fenixedu.messaging.test.util.TestConstants.ADDR_C;
-import static org.fenixedu.messaging.test.util.TestConstants.ADDR_INVALID;
-import static org.fenixedu.messaging.test.util.TestConstants.GRP_A;
-import static org.fenixedu.messaging.test.util.TestConstants.GRP_M;
-import static org.fenixedu.messaging.test.util.TestConstants.GRP_N;
-import static org.fenixedu.messaging.test.util.TestConstants.LOC_A;
-import static org.fenixedu.messaging.test.util.TestConstants.LS_A;
-import static org.fenixedu.messaging.test.util.TestConstants.LS_AA;
-import static org.fenixedu.messaging.test.util.TestConstants.LS_AB;
-import static org.fenixedu.messaging.test.util.TestConstants.LS_B;
-import static org.fenixedu.messaging.test.util.TestConstants.LS_EMPTY;
-import static org.fenixedu.messaging.test.util.TestConstants.STR_A;
-import static org.fenixedu.messaging.test.util.TestConstants.STR_B;
-import static org.junit.Assert.assertSame;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 public class TestHelpers {
 
@@ -50,61 +34,86 @@ public class TestHelpers {
         }
     }
 
-    /**
-     * Array and Stream setters are additive
-     * Collection setter always clears previous groups
-     * Null and repeated (handled by Set) groups are ignored
-     * Null containers throw NullPointerException
-     */
-    public static void testRecipientSetters(Consumer<Group[]> arraySetter, Consumer<Stream<Group>> streamSetter,
-            Consumer<Collection<Group>> collectionSetter, Supplier<Set<Group>> getter) {
-        Set<Group> groups;
-
-        Group[] groupArray = { GRP_A, null, GRP_N };
-        arraySetter.accept(groupArray);
-        groups = getter.get();
-        assertTrue(groups.size() == 2 && groups.contains(GRP_A) && groups.contains(GRP_N));
-
-        streamSetter.accept(Stream.of(null, GRP_N, GRP_N, GRP_M));
-        groups = getter.get();
-        assertTrue(groups.size() == 3 && groups.contains(GRP_A) && groups.contains(GRP_N) && groups.contains(GRP_M));
-
-        collectionSetter.accept(Lists.newArrayList(GRP_N, GRP_M, GRP_N, null));
-        groups = getter.get();
-        assertTrue(groups.size() == 2 && groups.contains(GRP_N) && groups.contains(GRP_M));
-
-        expectNullPointerException(() -> arraySetter.accept(null));
-        expectNullPointerException(() -> streamSetter.accept(null));
-        expectNullPointerException(() -> collectionSetter.accept(null));
+    public static <T> void testNullResistantSetAdder(Consumer<T[]> adder, T[] feed, Supplier<Set<T>> getter) {
+        requireNonNull(adder);
+        requireNonNull(getter);
+        if (feed == null) {
+            expectNullPointerException(() -> adder.accept(null));
+        } else {
+            Set<T> expectation = Stream.of(feed).filter(Objects::nonNull).collect(Collectors.toSet());
+            expectation.addAll(getter.get());
+            adder.accept(feed);
+            Set<T> result = getter.get();
+            assertEquals(result, expectation);
+        }
     }
 
-    /**
-     * Array and Stream setters are additive
-     * Collection setter always clears previous addresses
-     * Null, invalid and repeated (handled by Set) addresses are ignored
-     * Null containers throw NullPointerException
-     */
-    public static void testAddressSetters(Consumer<String[]> arraySetter, Consumer<Stream<String>> streamSetter,
-            Consumer<Collection<String>> collectionSetter, Supplier<Set<String>> getter) {
-        Set<String> addresses;
+    public static <T> void testNullResistantSetAdder(Consumer<Stream<T>> adder, Stream<T> feed, Supplier<Set<T>> getter) {
+        requireNonNull(adder);
+        requireNonNull(getter);
+        if (feed == null) {
+            expectNullPointerException(() -> adder.accept(null));
+        } else {
+            Set<T> expectation = feed.filter(Objects::nonNull).collect(Collectors.toSet());
+            expectation.addAll(getter.get());
+            adder.accept(feed);
+            Set<T> result = getter.get();
+            assertEquals(result, expectation);
+        }
+    }
 
-        String[] groupArray = { ADDR_A, null, ADDR_B, ADDR_INVALID };
-        arraySetter.accept(groupArray);
-        addresses = getter.get();
-        assertTrue(addresses.size() == 2 && addresses.contains(ADDR_A) && addresses.contains(ADDR_B));
+    public static <T> void testNullResistantSetAdder(Consumer<Collection<T>> adder, Collection<T> feed, Supplier<Set<T>> getter) {
+        requireNonNull(adder);
+        requireNonNull(getter);
+        if (feed == null) {
+            expectNullPointerException(() -> adder.accept(null));
+        } else {
+            Set<T> expectation = feed.stream().filter(Objects::nonNull).collect(Collectors.toSet());
+            expectation.addAll(getter.get());
+            adder.accept(feed);
+            Set<T> result = getter.get();
+            assertEquals(result, expectation);
+        }
+    }
 
-        streamSetter.accept(Stream.of(null, ADDR_B, ADDR_INVALID, ADDR_B, ADDR_C));
-        addresses = getter.get();
-        assertTrue(
-                addresses.size() == 3 && addresses.contains(ADDR_A) && addresses.contains(ADDR_B) && addresses.contains(ADDR_C));
+    public static <T> void testNullResistantSetSetter(Consumer<T[]> setter, T[] feed, Supplier<Set<T>> getter) {
+        requireNonNull(setter);
+        requireNonNull(getter);
+        if (feed == null) {
+            expectNullPointerException(() -> setter.accept(null));
+        } else {
+            Set<T> expectation = Stream.of(feed).filter(Objects::nonNull).collect(Collectors.toSet());
+            setter.accept(feed);
+            Set<T> result = getter.get();
+            assertEquals(result, expectation);
+        }
+    }
 
-        collectionSetter.accept(Lists.newArrayList(ADDR_B, ADDR_INVALID, ADDR_C, ADDR_B, null));
-        addresses = getter.get();
-        assertTrue(addresses.size() == 2 && addresses.contains(ADDR_B) && addresses.contains(ADDR_C));
+    public static <T> void testNullResistantSetSetter(Consumer<Stream<T>> setter, Stream<T> feed, Supplier<Set<T>> getter) {
+        requireNonNull(setter);
+        requireNonNull(getter);
+        if (feed == null) {
+            expectNullPointerException(() -> setter.accept(null));
+        } else {
+            Set<T> expectation = feed.filter(Objects::nonNull).collect(Collectors.toSet());
+            setter.accept(feed);
+            Set<T> result = getter.get();
+            assertEquals(result, expectation);
+        }
+    }
 
-        expectNullPointerException(() -> arraySetter.accept(null));
-        expectNullPointerException(() -> streamSetter.accept(null));
-        expectNullPointerException(() -> collectionSetter.accept(null));
+    public static <T> void testNullResistantSetSetter(Consumer<Collection<T>> setter, Collection<T> feed,
+            Supplier<Set<T>> getter) {
+        requireNonNull(setter);
+        requireNonNull(getter);
+        if (feed == null) {
+            expectNullPointerException(() -> setter.accept(null));
+        } else {
+            Set<T> expectation = feed.stream().filter(Objects::nonNull).collect(Collectors.toSet());
+            setter.accept(feed);
+            Set<T> result = getter.get();
+            assertEquals(result, expectation);
+        }
     }
 
     /**
@@ -116,35 +125,35 @@ public class TestHelpers {
      */
     public static void testContentSetters(Consumer<String> stringSetter, BiConsumer<String, Locale> stringLocaleSetter,
             Consumer<LocalizedString> localizedStringSetter, Supplier<LocalizedString> getter) {
-        localizedStringSetter.accept(LS_A);
-        assertSame(getter.get(), LS_A);
+        localizedStringSetter.accept(TestConstants.get().LS_A);
+        assertSame(getter.get(), TestConstants.get().LS_A);
 
-        stringSetter.accept(STR_B);
-        Assert.assertEquals(getter.get(), LS_AB);
+        stringSetter.accept(TestConstants.get().LAST_NAME);
+        assertEquals(getter.get(), TestConstants.get().LS_AB);
 
-        stringSetter.accept(STR_A);
-        Assert.assertEquals(getter.get(), LS_AA);
-
-        stringSetter.accept(null);
-        Assert.assertEquals(getter.get(), LS_A);
+        stringSetter.accept(TestConstants.get().FIRST_NAME);
+        assertEquals(getter.get(), TestConstants.get().LS_AA);
 
         stringSetter.accept(null);
-        Assert.assertEquals(getter.get(), LS_A);
+        assertEquals(getter.get(), TestConstants.get().LS_A);
 
-        stringLocaleSetter.accept(null, LOC_A);
-        Assert.assertEquals(getter.get(), LS_EMPTY);
+        stringSetter.accept(null);
+        assertEquals(getter.get(), TestConstants.get().LS_A);
 
-        stringLocaleSetter.accept(null, LOC_A);
-        Assert.assertEquals(getter.get(), LS_EMPTY);
+        stringLocaleSetter.accept(null, TestConstants.get().ITALIAN);
+        assertEquals(getter.get(), TestConstants.get().LS_EMPTY);
 
-        stringLocaleSetter.accept(STR_B, LOC_A);
-        Assert.assertEquals(getter.get(), LS_B);
+        stringLocaleSetter.accept(null, TestConstants.get().ITALIAN);
+        assertEquals(getter.get(), TestConstants.get().LS_EMPTY);
 
-        stringLocaleSetter.accept(STR_A, LOC_A);
-        Assert.assertEquals(getter.get(), LS_A);
+        stringLocaleSetter.accept(TestConstants.get().LAST_NAME, TestConstants.get().ITALIAN);
+        assertEquals(getter.get(), TestConstants.get().LS_B);
+
+        stringLocaleSetter.accept(TestConstants.get().FIRST_NAME, TestConstants.get().ITALIAN);
+        assertEquals(getter.get(), TestConstants.get().LS_A);
 
         expectNullPointerException(() -> localizedStringSetter.accept(null));
-        expectNullPointerException(() -> stringLocaleSetter.accept(STR_A, null));
+        expectNullPointerException(() -> stringLocaleSetter.accept(TestConstants.get().FIRST_NAME, null));
     }
 
     public static void shortWait() {
